@@ -9,25 +9,40 @@ logger.remove()
 logger.add('books.log', rotation='700kb', level='WARNING')
 logger.add(sys.stderr, level='INFO')
 
-base_url = "https://books.toscrape.com/index.html"
-
 
 # function to retrieve all urls for all books in the library
 def get_all_books_urls(url: str) -> list[str]:
-    pass
+    urls = []
+    while True:
+        try:
+            # logger.info(f"scraping paage at {url}")
+            response = requests.get(url)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Http requests error from {url}: {e}")
+            continue
+
+        tree = HTMLParser(response.text)
+        book_urls = get_all_books_urls_on_page(url, tree)
+        urls.extend(book_urls)
+        url = get_next_page_url(url, tree)
+        if not url:
+            break
+
+    return urls
 
 
-def get_next_page_url(tree: HTMLParser) -> str:
+def get_next_page_url(url: str, tree: HTMLParser) -> str | None:
     next_page_note = tree.css_first("li.next > a")
     if next_page_note and "href" in next_page_note.attributes:
-        return urljoin(base_url, next_page_note.attributes['href'])
-    logger.info("No next page")
+        return urljoin(url, next_page_note.attributes['href'])
+    logger.info(f"No next page:{url}")
 
 
-def get_all_books_urls_on_page(tree: HTMLParser) -> list[str]:
+def get_all_books_urls_on_page(url: str, tree: HTMLParser) -> list[str]:
     try:
         all_book_urls = tree.css("h3 > a")
-        return [urljoin(base_url, link.attributes['href']) for link in all_book_urls if "href" in link.attributes]
+        return [urljoin(url, link.attributes['href']) for link in all_book_urls if "href" in link.attributes]
 
     except Exception as e:
         logger.error(f"something went wrong to extract urls of books: {e}")
@@ -44,7 +59,9 @@ def get_book_price(url: str) -> float:
         tree = HTMLParser(response.text)
         price = extract_price_from_page(tree=tree)
         stock = extract_stock_quantity_from_page(tree=tree)
-        return price * stock
+        price_stock = price * stock
+        logger.info(f"get book price at {url}: found {price_stock}")
+        return price_stock
 
     except requests.exceptions.RequestException as e:
         logger.error(f"HTTP error : {e}")
@@ -84,15 +101,15 @@ def extract_stock_quantity_from_page(tree: HTMLParser) -> int:
 
 
 def main():
+    base_url = "https://books.toscrape.com/index.html"
     all_books_urls = get_all_books_urls(url=base_url)
     total_price = []
     for book_url in all_books_urls:
         price = get_book_price(url=book_url)
         total_price.append(price)
-        return sum(total_price)
+
+    return sum(total_price)
 
 
 if __name__ == '__main__':
-    r = requests.get(base_url)
-    tree = HTMLParser(r.text)
-    print(get_next_page_url(tree))
+    print(main())
