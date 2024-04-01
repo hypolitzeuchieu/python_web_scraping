@@ -1,4 +1,7 @@
+import random
 import sys
+import time
+
 import requests
 from loguru import logger
 from selectolax.parser import HTMLParser
@@ -12,24 +15,28 @@ logger.add(sys.stderr, level='INFO')
 
 # function to retrieve all urls for all books in the library
 def get_all_books_urls(url: str) -> list[str]:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+                      " (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}
     urls = []
-    while True:
-        try:
-            # logger.info(f"scraping paage at {url}")
-            response = requests.get(url)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Http requests error from {url}: {e}")
-            continue
+    with requests.Session() as session:
+        while True:
+            try:
+                # logger.info(f"scraping page at {url}")
+                response = session.get(url, headers=headers)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Http requests error from {url}: {e}")
+                continue
 
-        tree = HTMLParser(response.text)
-        book_urls = get_all_books_urls_on_page(url, tree)
-        urls.extend(book_urls)
-        url = get_next_page_url(url, tree)
-        if not url:
-            break
+            tree = HTMLParser(response.text)
+            book_urls = get_all_books_urls_on_page(url, tree)
+            urls.extend(book_urls)
+            url = get_next_page_url(url, tree)
+            if not url:
+                break
 
-    return urls
+        return urls
 
 
 def get_next_page_url(url: str, tree: HTMLParser) -> str | None:
@@ -49,12 +56,15 @@ def get_all_books_urls_on_page(url: str, tree: HTMLParser) -> list[str]:
         return []
 
 
-def get_book_price(url: str) -> float:
+def get_book_price(url: str, session: requests.Session = None) -> float:
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
                       " (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}
     try:
-        response = requests.get(url, headers=headers)
+        if session:
+            response = session.get(url, headers=headers)
+        else:
+            response = requests.get(url, headers=headers)
         response.raise_for_status()
         tree = HTMLParser(response.text)
         price = extract_price_from_page(tree=tree)
@@ -104,11 +114,12 @@ def main():
     base_url = "https://books.toscrape.com/index.html"
     all_books_urls = get_all_books_urls(url=base_url)
     total_price = []
-    for book_url in all_books_urls:
-        price = get_book_price(url=book_url)
-        total_price.append(price)
-
-    return sum(total_price)
+    with requests.Session() as session:
+        for book_url in all_books_urls:
+            price = get_book_price(url=book_url, session=session)
+            total_price.append(price)
+            time.sleep(random.uniform(0.8, 1))
+        return sum(total_price)
 
 
 if __name__ == '__main__':
