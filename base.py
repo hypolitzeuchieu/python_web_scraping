@@ -18,7 +18,10 @@ def get_all_books_urls(url: str) -> list[str]:
 
 
 def get_next_page_url(tree: HTMLParser) -> str:
-    pass
+    next_page_note = tree.css_first("li.next > a")
+    if next_page_note and "href" in next_page_note.attributes:
+        return urljoin(base_url, next_page_note.attributes['href'])
+    logger.info("No next page")
 
 
 def get_all_books_urls_on_page(tree: HTMLParser) -> list[str]:
@@ -81,7 +84,6 @@ def extract_stock_quantity_from_page(tree: HTMLParser) -> int:
 
 
 def main():
-    base_url = "https://books.toscrape.com/index.html"
     all_books_urls = get_all_books_urls(url=base_url)
     total_price = []
     for book_url in all_books_urls:
@@ -91,7 +93,6 @@ def main():
 
 
 if __name__ == '__main__':
-    url = "https://books.toscrape.com/index.html"
-    r = requests.get(url)
+    r = requests.get(base_url)
     tree = HTMLParser(r.text)
-    get_all_books_urls_on_page(tree)
+    print(get_next_page_url(tree))
